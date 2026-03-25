@@ -1,29 +1,75 @@
-# Terminology
+# Development Notes — Omnicit.PIM
 
-The terminology in the API is terrible, so here's the general translation to PIM terminology in the context of activating a role:
+## Module structure
 
-- **roleAssignmentSchedule** - Lists all activated roles in effect, both eligible and persistent (aka active). You can
-distinguish by the assignmentType property.
-- **roleAssignmentScheduleInstance** - A 1:1 mapping to a role assignment schedule, and is referenced by the
-roleAssignmentScheduleId.
-This API shows similar info but also includes the role assignment OriginId and ScheduleId (no idea what these are for).
-Unlike the PIMv2 api, you can't expand the roleAssingment schedule (previously known as a linkedEligibleROleAssignment)
-in a single query
-- **roleAssignmentScheduleRequest** - CREATE on this to "activate" an eligible role, and then use the resultant ID to
-track the activation process. Usually it will simply be provisioned unless you have an approval workflow set up, but as far as I can tell you can't
-see when the role actually has gone into effect.
-- **roleEligibilitySchedules** - Lists all roles that are eligible to be activated. Instances are similar 1:1 mappings
-like roleAssignment but seem to contain less info and thus are less useful
+```
+Source/
+  Omnicit.PIM.psd1          # Module manifest
+  Omnicit.PIM.psm1          # Loader: Classes -> Private -> Public
+  Classes/                  # Argument completers (loaded first)
+  Private/                  # Internal helper functions
+  Public/                   # Exported cmdlets (file name == function name)
+  Formats/                  # .Types.ps1xml and .Format.ps1xml files
+```
 
-Both Activation and Deactivation go thru the `roleAssignmentScheduleRequest` API, calling either `SelfActivate` or `SelfDeactivate`.
-For `SelfDeactivate`, you must provide the roleAssignmentScheduleInstance ID, **not** the schedule id.
+## API Terminology
 
-## Detecting activations
+### Directory Roles (Microsoft Graph)
 
-Unfortunately the request ends at the "Provisioning" status and we can't use it to detect when a role activates. In order to do that we have to watch for the role to be Activated
+The Graph API terminology is confusing. Here is the translation to PIM concepts:
 
-## References
+| Graph resource | PIM meaning |
+|---|---|
+| `roleEligibilitySchedules` | Roles you are eligible to activate (not yet active) |
+| `roleAssignmentScheduleInstances` | Currently active role assignments (eligible-activated + persistent) |
+| `roleAssignmentScheduleRequest` | The activation/deactivation operation. POST with `SelfActivate` or `SelfDeactivate` |
 
-https://docs.microsoft.com/en-us/azure/active-directory/privileged-identity-management/pim-apis
+Both activation and deactivation go through `roleAssignmentScheduleRequests`. For `SelfDeactivate` you must supply the `roleAssignmentScheduleInstance` ID (not the schedule ID).
 
-https://docs.microsoft.com/en-us/graph/api/resources/privilegedidentitymanagement-root?view=graph-rest-beta&preserve-view=true#migrate-to-pim-v3-api-for-azure-ad-roles-role-management-apis
+The request reaches `Provisioned` status before the role instance actually appears in the directory. `Wait-OPIMDirectoryRole` polls both stages.
+
+References:
+- https://docs.microsoft.com/en-us/azure/active-directory/privileged-identity-management/pim-apis
+- https://docs.microsoft.com/en-us/graph/api/resources/privilegedidentitymanagement-root
+
+### Azure Resource Roles (Az.Resources)
+
+| Az cmdlet | PIM meaning |
+|---|---|
+| `Get-AzRoleEligibilitySchedule` | Eligible (inactive) RBAC roles |
+| `Get-AzRoleAssignmentScheduleInstance` | Active RBAC role assignments |
+| `New-AzRoleAssignmentScheduleRequest` | Activate or deactivate a role |
+
+### PIM for Groups (Microsoft Graph)
+
+All group PIM operations go through the `identityGovernance/privilegedAccess/group` endpoint family:
+
+| Graph resource | PIM meaning |
+|---|---|
+| `eligibilitySchedules` | Eligible (inactive) group memberships/ownerships |
+| `assignmentScheduleInstances` | Currently active group assignments |
+| `assignmentScheduleRequests` | POST with `selfActivate` or `selfDeactivate` |
+
+`accessId` is either `member` or `owner` and identifies whether the assignment is a group membership or ownership.
+
+Required Graph scope: `PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup`
+
+## Activated vs Active
+
+- **Eligible** — the user has a time-bound eligible assignment but it is not currently active
+- **Activated** — an eligible assignment the user has explicitly activated for a window
+- **Active (persistent)** — a direct (non-PIM) role assignment that is always on; outside scope of this module
+
+## Known issues / hacks
+
+- **Format load order** — `Update-FormatData -PrependPath` is called manually in the psm1 because of a PowerShell bug where formats load before types: https://github.com/PowerShell/PowerShell/issues/17345
+- **directoryScopeId expand** — The v1.0 Graph API cannot `$expand` `directoryScope` in the same query, so `Get-OPIMDirectoryRole` makes an extra request per non-root scope to rehydrate the display name.
+
+## Adding a new function
+
+1. Create `Source/Public/Verb-OPIMNoun.ps1` with a matching `function Verb-OPIMNoun` inside.
+2. Add the function name to `FunctionsToExport` in `Omnicit.PIM.psd1`.
+3. If the function needs tab completion, create a completer class in `Source/Classes/`.
+4. Add matching `.Types.ps1xml` and `.Format.ps1xml` files in `Source/Formats/` and register them in `TypesToProcess` in the manifest.
+5. Add any short aliases to the alias map in `Omnicit.PIM.psm1` and to `AliasesToExport` in the manifest.
+

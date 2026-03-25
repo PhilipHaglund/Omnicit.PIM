@@ -1,57 +1,186 @@
-# JAz.PIM Privileged Identity Management Activation Module
+# Omnicit.PIM — Privileged Identity Management Module
 
-Provides a friendly wrapper to the Az PIM Cmdlets for self activation and deactivation of roles using the new PIMv3 API.
-This supports both Azure Resource Roles and Azure AD Roles.
+A PowerShell module for self-service activation and deactivation of PIM roles and group memberships across three surfaces:
 
-## Usage Quickstart
+| Surface | Noun | Cmdlet prefix |
+|---|---|---|
+| Azure AD / Entra ID directory roles | `DirectoryRole` | `OPIM` |
+| Azure resource (RBAC) roles | `AzureRole` | `OPIM` |
+| Entra ID PIM groups | `EntraIDGroup` | `OPIM` |
+
+> Originally created by [Justin Grote @justinwgrote](https://github.com/justinwgrote). Overhauled and maintained by [Omnicit](https://github.com/Omnicit).
+
+---
+
+## Installation
 
 ```powershell
-Install-Module JAz.Pim
-Import-Module JAz.Pim
+Install-Module Omnicit.PIM
+Import-Module Omnicit.PIM
+```
+
+---
+
+## Quick Start
+
+### Azure AD / Entra ID Directory Roles
+
+```powershell
+# Connect (request only what you need)
+Connect-MgGraph -Scopes 'RoleEligibilitySchedule.ReadWrite.Directory',
+                         'RoleAssignmentSchedule.ReadWrite.Directory',
+                         'AdministrativeUnit.Read.All'
+
+# List eligible roles
+Get-OPIMDirectoryRole
+
+# Activate — tab-complete the role name
+Enable-OPIMDirectoryRole <tab>
+
+# Activate all eligible roles for 4 hours with a justification
+Get-OPIMDirectoryRole | Enable-OPIMDirectoryRole -Hours 4 -Justification 'Incident response'
+
+# Deactivate
+Get-OPIMDirectoryRole -Activated | Disable-OPIMDirectoryRole
+
+# Activate and wait for provisioning before continuing
+Get-OPIMDirectoryRole | Enable-OPIMDirectoryRole -Wait
+```
+
+### Azure Resource (RBAC) Roles
+
+```powershell
+# Connect
 Connect-AzAccount
-Enable-JAzRole <tab or shift-enter>
-Disable-JAzRole <tab or shift-enter>
 
-Connect-MgGraph -Scopes 'RoleEligibilitySchedule.Read.Directory','RoleAssignmentSchedule.ReadWrite.Directory','AdministrativeUnit.Read.All'
-#RoleManagement.ReadWrite.Directory scope will also work.
+# List eligible roles
+Get-OPIMAzureRole
 
-Enable-JAzADRole <tab or shift-enter>
-Disable-JAzADRole <tab or shift-enter>
+# Activate — tab-complete the role name
+Enable-OPIMAzureRole <tab>
+
+# Deactivate all active roles
+Get-OPIMAzureRole -Activated | Disable-OPIMAzureRole
 ```
 
-## Additional Notes
-
-The Enable/Disable commands fully support -WhatIf and -Verbose if you want to see what would happen first.
-
-If you want to activate multiple roles at once, use `Get-JAzRole` and pipe the ones you want to activate to `Enable-JAzRole`
-
-The equivalents for Azure AD Roles is `Enable-JAzADRole` and `Disable-JAzADRole` and the behavior is mostly equivalent.
-
-The module also supports re-prefixing so you can do `import-module Jaz.PIM -Prefix 'Az' -verbose` and get more 'Az'-like commands
-
-The scope is currently limited to "self" activation, but may expand in scope to approvals, enabling role schedules for others, etc.
-
-In this module we also establish a new terminology difference between "Active" and "Activated" roles. An "Activated" role
-is an eligible role that has been activated. All Activated roles are Active roles, but not all Active roles are
-Activated roles (some Active roles are persistently assigned). Persistent Active roles are currently outside the scope
-of this module.
-
-The default activation period is 1 hour. You can override this with the `-Hours` parameter. You can make this persistent
-by putting this setting into your PowerShell profile:
+### Entra ID PIM Groups
 
 ```powershell
-$PSDefaultParameterValues['Enable-JAz*Role:Hours'] = 5
+# Connect (additional scope required)
+Connect-MgGraph -Scopes 'RoleEligibilitySchedule.ReadWrite.Directory',
+                         'PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup'
+
+# List eligible group memberships/ownerships
+Get-OPIMEntraIDGroup
+
+# Filter by access type
+Get-OPIMEntraIDGroup -AccessType member
+
+# Activate — tab-complete the group name
+Enable-OPIMEntraIDGroup <tab>
+
+# Activate all eligible group assignments
+Get-OPIMEntraIDGroup | Enable-OPIMEntraIDGroup -Hours 2 -Justification 'Project work'
+
+# Deactivate
+Get-OPIMEntraIDGroup -Activated | Disable-OPIMEntraIDGroup
 ```
 
-The same action can be taken for Justification if you perform the same action fairly regularly. Your company policy
-should dictate this.
+---
 
-## Microsoft Graph Scope Permissions
+## Install-OPIMConfiguration
 
-Please note currently the Azure AD Roles use the Graph PowerShell SDK, but the default scopes in the Graph App don't
-cover role management. I'm debating whether to roll a new published app for this purpose, but either way you may need
-to use Connect-MgGraph with an appropriate scope like 'RoleEligibilitySchedule.ReadWrite.Directory' or 'RoleManagement.ReadWrite.Directory'
-and this may require admin consent to add the scope to your Powershell Graph enterprise app instance in your tenant.
+A convenience function to set up quality-of-life shortcuts in your PowerShell profile.
 
-Note that this is a **delegated** scope grant, not an **application** scope grant, so the user still needs sufficient permissions
-to perform actions, and self-actions usually don't require anything other than being a regular user in the environment.
+```powershell
+# Add the Activate-MyPIM function and 'pim' alias to your profile
+Install-OPIMConfiguration -ProfileAlias
+
+# Preview what -ProfileAlias would do without making changes
+Install-OPIMConfiguration -ProfileAlias -WhatIf
+
+# Register a tenant alias (maps short name -> tenant ID)
+Install-OPIMConfiguration -TenantMap -TenantAlias contoso -TenantId '00000000-0000-0000-0000-000000000000'
+
+# Set a default activation duration of 4 hours in your profile
+Install-OPIMConfiguration -DefaultParameters -Duration 4
+```
+
+After running `-ProfileAlias`, a new `pim` shortcut becomes available in your sessions:
+
+```powershell
+# Activate all eligible directory roles and PIM groups
+pim
+
+# Activate against a named tenant
+pim -TenantAlias contoso -Duration 8
+```
+
+---
+
+## Short Aliases
+
+For backwards compatibility and convenience, short `PIM`-prefixed aliases are available:
+
+| Canonical cmdlet | Aliases |
+|---|---|
+| `Get-OPIMDirectoryRole` | `Get-PIMADRole`, `Get-PIMRole` |
+| `Enable-OPIMDirectoryRole` | `Enable-PIMADRole`, `Enable-PIMRole` |
+| `Disable-OPIMDirectoryRole` | `Disable-PIMADRole`, `Disable-PIMRole` |
+| `Wait-OPIMDirectoryRole` | `Wait-PIMADRole`, `Wait-PIMRole` |
+| `Get-OPIMAzureRole` | `Get-PIMResourceRole` |
+| `Enable-OPIMAzureRole` | `Enable-PIMResourceRole` |
+| `Disable-OPIMAzureRole` | `Disable-PIMResourceRole` |
+| `Get-OPIMEntraIDGroup` | `Get-PIMGroup` |
+| `Enable-OPIMEntraIDGroup` | `Enable-PIMGroup` |
+| `Disable-OPIMEntraIDGroup` | `Disable-PIMGroup` |
+
+---
+
+## Default Activation Duration
+
+The default activation period is 1 hour. Override per-call with `-Hours`, or make it persistent:
+
+```powershell
+$PSDefaultParameterValues['Enable-OPIM*:Hours'] = 4
+```
+
+Or use `Install-OPIMConfiguration -DefaultParameters -Duration 4` to write this to your profile automatically.
+
+---
+
+## WhatIf / Confirm Support
+
+All activation and deactivation commands support `-WhatIf` and `-Confirm`:
+
+```powershell
+Get-OPIMDirectoryRole | Enable-OPIMDirectoryRole -WhatIf
+```
+
+---
+
+## Activated vs Active
+
+This module distinguishes:
+
+- **Eligible** — a role assignment you can activate but haven't yet
+- **Activated** — an eligible role you have explicitly turned on for a time window
+- **Active (persistent)** — a role that is always on (outside scope of this module)
+
+Use `-Activated` on the `Get-OPIM*` cmdlets to see currently active assignments.
+
+---
+
+## Dependencies
+
+| Dependency | Purpose |
+|---|---|
+| `Microsoft.Graph.Authentication` 2.0+ | Directory roles and Entra ID group PIM (raw `Invoke-MgGraphRequest`) |
+| `Az.Resources` 5.6+ | Azure resource (RBAC) roles |
+
+---
+
+## Attribution
+
+This module is a fork/overhaul of [JAz.PIM](https://github.com/JustinGrote/JAz.PIM) by [Justin Grote @justinwgrote](https://github.com/justinwgrote), released under the [MIT License](LICENSE).
+

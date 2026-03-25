@@ -1,39 +1,51 @@
 using namespace System.Management.Automation
-using namespace Microsoft.Graph.Powershell.Models
-using namespace Microsoft.Graph.Powershell.Runtime
+
 function Convert-GraphHttpException {
-    [OutputType([Management.Automation.ErrorRecord])]
+    <#
+    .SYNOPSIS
+    Parses raw Graph API HTTP error responses into structured ErrorRecords.
+    Works with raw Invoke-MgGraphRequest errors without requiring typed Graph SDK classes.
+    #>
+    [OutputType([ErrorRecord])]
     param(
         [ErrorRecord]$errorRecord
     )
-    <#
-    .SYNOPSIS
-    #HACK: This re-types the generic HttpResponseExceptions back to the specific ones, passes thru if nothing needs to be done
-    #This can be removed once the actual cmdlet is available
-    #>
 
-    if ($errorRecord.Exception -isnot [Microsoft.Graph.PowerShell.Authentication.Helpers.HttpResponseException]) {
-        return $errorRecord
+    $ex = $errorRecord.Exception
+
+    # Try to read the HTTP response body
+    $responseContent = $null
+    if ($ex.Response -and $ex.Response.Content) {
+        try {
+            $responseContent = $ex.Response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+        } catch {}
     }
 
-    $response = $errorRecord.Exception.Response
-    $errMessage = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult() | ConvertFrom-Json | Select-Object -expand error
-    $ioDataError = [IODataError]@{
-        Error = @{
-            Code    = $errMessage.code
-            Message = $errMessage.message
-        }
+    # Fallback: sometimes the JSON payload is already in the exception message
+    if (-not $responseContent -and $ex.Message -like '*"error"*') {
+        $responseContent = $ex.Message
     }
-    $exception = [RestException[IODataError]]::new($response, $ioDataError)
-    $errorId = $ioDataError.Error.Code, $ioDataError.Error.Message -join ','
 
-    #Generate new error record
-    $errRecord = [ErrorRecord]::new(
-        $exception,
-        $errorId,
-        'OperationStopped',
-        $request
-    )
-    $errRecord.ErrorDetails = $ioDataError.Error.Code, $ioDataError.Error.Message -join ': '
-    return $errRecord
+    if ($responseContent) {
+        try {
+            $parsed    = $responseContent | ConvertFrom-Json
+            $errorInfo = $parsed.error
+            if ($errorInfo) {
+                $code      = $errorInfo.code
+                $message   = $errorInfo.message
+                $detail    = "$code`: $message"
+                $newEx     = [System.Exception]::new($detail, $ex)
+                $errRecord = [ErrorRecord]::new(
+                    $newEx,
+                    $code,
+                    [System.Management.Automation.ErrorCategory]::OperationStopped,
+                    $null
+                )
+                $errRecord.ErrorDetails = [System.Management.Automation.ErrorDetails]::new($detail)
+                return $errRecord
+            }
+        } catch {}
+    }
+
+    return $errorRecord
 }

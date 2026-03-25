@@ -1,28 +1,32 @@
-function Resolve-RoleByName ($RoleName, [Switch]$AD, [Switch]$Activated) {
+function Resolve-RoleByName ($RoleName, [Switch]$AD, [Switch]$Group, [Switch]$Activated) {
     <#
-.SYNOPSIS
-Finds a role based on its tab complete information in RoleName parameter
-#>
-    if (-not $RoleName) { throw 'RoleName was null. this is a bug' }
-    #This finds a guid inside parentheses.
+    .SYNOPSIS
+    Resolves a tab-completed role name string to the matching schedule object.
+    The RoleName string must contain the schedule ID in parentheses, e.g. 'Global Administrator (abc-123)'.
+    #>
+    if (-not $RoleName) { throw 'RoleName was null. This is a bug.' }
+
+    # Extract the GUID from the end of the completion string: 'Name (guid)'
     $guidExtractRegex = '.+\(([\w-]+)\)', '$1'
-    $roleGuid = $RoleName -replace $guidExtractRegex
-    if (-not $roleGuid) { throw "RoleName $roleName was in an incorrect format. It should have (RoleNameGuid) somewhere in the body. The -RoleName parameter is generally not meant to be entered manually, try <tab> or pipe in objects per the help examples." }
-    $Role = if ($AD) {
-        #For Graph, we need the original role schedule to do the disablement either way, so activated doesn't matter
-        Get-ADRole -Activated:$Activated -Identity $roleGuid
-    } else {
-        #Get-Role doesn't support identity filtering serverside.
-        Get-Role -Activated:$Activated | Where-Object { $_.Name -eq $RoleGuid }
+    $scheduleId       = $RoleName -replace $guidExtractRegex
+    if (-not $scheduleId) {
+        throw "RoleName '$RoleName' is in an unexpected format. Expected 'Display Name (schedule-id)'. The -RoleName parameter is meant to be used with tab completion, not typed manually."
     }
 
-    # if ($AD) {
-    #     Get-ADRole -Activated:$Activated | Where-Object RoleAssignmentScheduleId -EQ $roleGuid
-    # } else {
-    #     Get-Role -Activated:$Activated | Where-Object Name -EQ $roleGuid
-    # }
-    if (-not $Role) { throw "RoleGuid $roleGuid from $RoleName was not found as an eligible role for this user. NOTE: If you used autocomplete to get this result and didn't manually type it or use past history, please report this as a bug." }
-    if ($Role.count -ne 1) { throw "Multiple roles found for role guid $roleGuid. This is a bug, please report it" }
+    $role = if ($Group) {
+        Get-OPIMEntraIDGroup -Identity $scheduleId
+    } elseif ($AD) {
+        Get-OPIMDirectoryRole -Activated:$Activated -Identity $scheduleId
+    } else {
+        Get-OPIMAzureRole -Activated:$Activated | Where-Object { $_.Name -eq $scheduleId }
+    }
 
-    return $Role
+    if (-not $role) {
+        throw "Schedule ID '$scheduleId' from '$RoleName' was not found as an eligible role for this user. If you used tab completion and this is unexpected, please report it as a bug."
+    }
+    if ($role.Count -gt 1) {
+        throw "Multiple roles found for schedule ID '$scheduleId'. This is a bug — please report it."
+    }
+
+    return $role
 }
