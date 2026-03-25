@@ -14,9 +14,9 @@ function Resolve-RoleByName ($RoleName, [Switch]$AD, [Switch]$Group, [Switch]$Ac
     }
 
     $role = if ($Group) {
-        Get-OPIMEntraIDGroup -Identity $scheduleId -Activated:$Activated
+        Get-OPIMEntraIDGroup -Activated:$Activated | Where-Object { $_.id -eq $scheduleId }
     } elseif ($AD) {
-        Get-OPIMDirectoryRole -Activated:$Activated -Identity $scheduleId
+        Get-OPIMDirectoryRole -Activated:$Activated | Where-Object { $_.id -eq $scheduleId }
     } else {
         Get-OPIMAzureRole -Activated:$Activated | Where-Object { $_.Name -eq $scheduleId }
     }
@@ -24,7 +24,7 @@ function Resolve-RoleByName ($RoleName, [Switch]$AD, [Switch]$Group, [Switch]$Ac
     if (-not $role) {
         throw "Schedule ID '$scheduleId' from '$RoleName' was not found as an eligible role for this user. If you used tab completion and this is unexpected, please report it as a bug."
     }
-    if ($role.Count -gt 1) {
+    if (@($role).Count -gt 1) {
         throw "Multiple roles found for schedule ID '$scheduleId'. This is a bug — please report it."
     }
 

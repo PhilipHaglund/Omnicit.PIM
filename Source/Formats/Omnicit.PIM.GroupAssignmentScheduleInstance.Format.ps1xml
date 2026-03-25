@@ -20,9 +20,9 @@
             <TableColumnItems>
               <TableColumnItem><PropertyName>PrincipalDisplayName</PropertyName></TableColumnItem>
               <TableColumnItem><PropertyName>GroupDisplayName</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>accessId</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>assignmentType</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>endDateTime</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>AccessId</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>AssignmentType</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>EndDateTime</PropertyName></TableColumnItem>
             </TableColumnItems>
           </TableRowEntry>
         </TableRowEntries>

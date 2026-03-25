@@ -11,31 +11,13 @@ foreach ($ScriptPathItem in 'Classes', 'Private', 'Public') {
         }
 }
 
-# Register short PIM-prefixed aliases pointing to the canonical OPIM-prefixed function names.
-$AliasMap = [ordered]@{
-    'Get-PIMADRole'           = 'Get-OPIMDirectoryRole'
-    'Get-PIMRole'             = 'Get-OPIMDirectoryRole'
-    'Enable-PIMADRole'        = 'Enable-OPIMDirectoryRole'
-    'Enable-PIMRole'          = 'Enable-OPIMDirectoryRole'
-    'Disable-PIMADRole'       = 'Disable-OPIMDirectoryRole'
-    'Disable-PIMRole'         = 'Disable-OPIMDirectoryRole'
-    'Wait-PIMADRole'          = 'Wait-OPIMDirectoryRole'
-    'Wait-PIMRole'            = 'Wait-OPIMDirectoryRole'
-    'Get-PIMResourceRole'     = 'Get-OPIMAzureRole'
-    'Enable-PIMResourceRole'  = 'Enable-OPIMAzureRole'
-    'Disable-PIMResourceRole' = 'Disable-OPIMAzureRole'
-    'Get-PIMGroup'            = 'Get-OPIMEntraIDGroup'
-    'Enable-PIMGroup'         = 'Enable-OPIMEntraIDGroup'
-    'Disable-PIMGroup'        = 'Disable-OPIMEntraIDGroup'
-}
-foreach ($alias in $AliasMap.GetEnumerator()) {
-    New-Alias -Name $alias.Key -Value $alias.Value -Force
-}
+Export-ModuleMember -Function $PublicFunctions
 
-Export-ModuleMember -Function $PublicFunctions -Alias $AliasMap.Keys
-
-#HACK: There appears to be a bug where formats load before types, so we must do this to get the formats to load right.
-#https://github.com/PowerShell/PowerShell/issues/17345
+# FormatsToProcess in the manifest uses Update-FormatData -AppendPath, which means RequiredModules (Az.Resources)
+# loaded before this psm1 take format precedence. Using -PrependPath here ensures our formats win, which is
+# required for the RoleAssignmentScheduleRequest Az-native type. The manifest FormatsToProcess remains
+# disabled because it would lose to Az's format definitions.
+# Ref: https://github.com/PowerShell/PowerShell/issues/17345 (closed for inactivity, not fixed — confirmed still an issue Feb 2025)
 Get-ChildItem "$PSScriptRoot\Formats\*.Format.PS1XML" | ForEach-Object {
     Update-FormatData -PrependPath $PSItem
 }

@@ -13,6 +13,7 @@ function Disable-OPIMAzureRole {
     Disable-OPIMAzureRole <tab>
     Tab complete active Azure roles.
     #>
+    [Alias('Disable-PIMResourceRole')]
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'RoleName')]
     param(
         #Active role schedule object from Get-OPIMAzureRole -Activated.

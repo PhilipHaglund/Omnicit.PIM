@@ -23,15 +23,16 @@ function Enable-OPIMAzureRole {
     Get-OPIMAzureRole | Select-Object -First 1 | Enable-OPIMAzureRole -Hours 4
     Activate the first eligible Azure role for 4 hours.
     #>
+    [Alias('Enable-PIMResourceRole')]
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'RoleName')]
     param(
         #Eligible role object from Get-OPIMAzureRole.
         [Parameter(ParameterSetName = 'RoleObject', Mandatory, ValueFromPipeline)]
         $Role,
-        #Friendly name of the eligible Azure role. Supports tab completion.
+        #Friendly name of the eligible Azure role. Supports tab completion. Accepts multiple values.
         [Parameter(Position = 0, ParameterSetName = 'RoleName', Mandatory)]
         [ArgumentCompleter([AzureEligibleRoleCompleter])]
-        [string]$RoleName,
+        [string[]]$RoleName,
         #Justification for the activation. May be required by your PIM policy.
         [string]$Justification,
         #Ticket number associated with this activation.
@@ -48,59 +49,65 @@ function Enable-OPIMAzureRole {
         [Switch]$Wait
     )
     process {
-        if ($RoleName) { $Role = Resolve-RoleByName $RoleName }
-
-        $roleActivateParams = @{
-            Name                            = New-Guid
-            Scope                           = $Role.ScopeId
-            PrincipalId                     = $Role.PrincipalId
-            RoleDefinitionId                = $Role.RoleDefinitionId
-            RequestType                     = 'SelfActivate'
-            LinkedRoleEligibilityScheduleId = $Role.Name
-            Justification                   = $Justification
-        }
-
-        if ($Until) {
-            $roleActivateParams.ExpirationType         = 'AfterDateTime'
-            $roleActivateParams.ExpirationEndDateTime  = $Until
-            [string]$roleExpireTime = $Until
+        $resolvedRoles = if ($RoleName) {
+            $RoleName | ForEach-Object { Resolve-RoleByName $_ }
         } else {
-            $roleActivateParams.ExpirationType        = 'AfterDuration'
-            $roleActivateParams.ExpirationDuration    = [XmlConvert]::ToString([TimeSpan]::FromHours($Hours))
-            [string]$roleExpireTime = $NotBefore.AddHours($Hours)
+            @($Role)
         }
 
-        if ($TicketNumber) { $roleActivateParams.TicketNumber = $TicketNumber }
-        if ($TicketSystem)  { $roleActivateParams.TicketSystem  = $TicketSystem }
+        foreach ($Role in $resolvedRoles) {
+            $roleActivateParams = @{
+                Name                            = New-Guid
+                Scope                           = $Role.ScopeId
+                PrincipalId                     = $Role.PrincipalId
+                RoleDefinitionId                = $Role.RoleDefinitionId
+                RequestType                     = 'SelfActivate'
+                LinkedRoleEligibilityScheduleId = $Role.Name
+                Justification                   = $Justification
+            }
 
-        if ($PSCmdlet.ShouldProcess(
-                "$($Role.RoleDefinitionDisplayName) on $($Role.ScopeDisplayName) ($($Role.ScopeId))",
-                "Activate Azure Role from $NotBefore to $roleExpireTime"
-            )) {
-            try {
-                $response = New-AzRoleAssignmentScheduleRequest @roleActivateParams -ErrorAction Stop
-            } catch {
-                if (-not ($PSItem.FullyQualifiedErrorId -like 'RoleAssignmentRequestPolicyValidationFailed*')) {
+            if ($Until) {
+                $roleActivateParams.ExpirationType         = 'AfterDateTime'
+                $roleActivateParams.ExpirationEndDateTime  = $Until
+                [string]$roleExpireTime = $Until
+            } else {
+                $roleActivateParams.ExpirationType        = 'AfterDuration'
+                $roleActivateParams.ExpirationDuration    = [XmlConvert]::ToString([TimeSpan]::FromHours($Hours))
+                [string]$roleExpireTime = $NotBefore.AddHours($Hours)
+            }
+
+            if ($TicketNumber) { $roleActivateParams.TicketNumber = $TicketNumber }
+            if ($TicketSystem)  { $roleActivateParams.TicketSystem  = $TicketSystem }
+
+            if ($PSCmdlet.ShouldProcess(
+                    "$($Role.RoleDefinitionDisplayName) on $($Role.ScopeDisplayName) ($($Role.ScopeId))",
+                    "Activate Azure Role from $NotBefore to $roleExpireTime"
+                )) {
+                try {
+                    $response = New-AzRoleAssignmentScheduleRequest @roleActivateParams -ErrorAction Stop
+                } catch {
+                    if (-not ($PSItem.FullyQualifiedErrorId -like 'RoleAssignmentRequestPolicyValidationFailed*')) {
+                        $PSCmdlet.WriteError($PSItem)
+                        continue
+                    }
+                    if ($PSItem -match 'JustificationRule') {
+                        $PSItem.ErrorDetails = 'Your PIM policy requires a justification for this role. Use the -Justification parameter.'
+                    }
+                    if ($PSItem -match 'ExpirationRule') {
+                        $PSItem.ErrorDetails = 'Your PIM policy requires a shorter expiration. Use -NotAfter to specify an earlier time.'
+                    }
                     $PSCmdlet.WriteError($PSItem)
-                    return
+                    continue
                 }
-                if ($PSItem -match 'JustificationRule') {
-                    $PSItem.ErrorDetails = 'Your PIM policy requires a justification for this role. Use the -Justification parameter.'
-                }
-                if ($PSItem -match 'ExpirationRule') {
-                    $PSItem.ErrorDetails = 'Your PIM policy requires a shorter expiration. Use -NotAfter to specify an earlier time.'
-                }
-                $PSCmdlet.WriteError($PSItem)
-                return
-            }
 
-            if ($Wait) {
-                do {
-                    $roleActivation = Get-AzRoleAssignmentScheduleRequest -Name $response.Name -Scope $response.Scope -ErrorAction Stop
-                } while (-not $roleActivation)
-            }
+                if ($Wait) {
+                    do {
+                        $roleActivation = Get-AzRoleAssignmentScheduleRequest -Name $response.Name -Scope $response.Scope -ErrorAction Stop
+                    } while (-not $roleActivation)
+                }
 
-            return $response
+                $response
+            }
         }
     }
 }

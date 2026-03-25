@@ -19,6 +19,7 @@ function Wait-OPIMDirectoryRole {
     .OUTPUTS
     System.Collections.Hashtable (tagged as Omnicit.PIM.DirectoryAssignmentScheduleInstance) when -PassThru is used.
     #>
+    [Alias('Wait-PIMADRole', 'Wait-PIMRole')]
     [OutputType([System.Collections.Hashtable])]
     [CmdletBinding()]
     param (
@@ -37,7 +38,7 @@ function Wait-OPIMDirectoryRole {
         [Switch]$NoSummary
     )
     begin {
-        [List[hashtable]]$RoleRequests = [List[hashtable]]::new()
+        [List[PSObject]]$RoleRequests = [List[PSObject]]::new()
         $parentId = Get-Random
     }
     process {

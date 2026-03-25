@@ -35,8 +35,8 @@ Description = 'Azure Privileged Identity Management (PIM) Self Activation Comman
 PowerShellVersion = '7.2'
 
 RequiredModules = @(
-    @{ ModuleName = 'Az.Resources';                  ModuleVersion = '5.6.0' }
-    @{ ModuleName = 'Microsoft.Graph.Authentication'; ModuleVersion = '2.0.0' }
+    @{ ModuleName = 'Az.Resources';                  ModuleVersion = '9.0.3' }
+    @{ ModuleName = 'Microsoft.Graph.Authentication'; ModuleVersion = '2.36.0' }
 )
 
 TypesToProcess = @(
@@ -47,9 +47,13 @@ TypesToProcess = @(
     'Formats/Omnicit.PIM.GroupAssignmentScheduleInstance.Types.ps1xml'
     'Formats/Omnicit.PIM.GroupAssignmentScheduleRequest.Types.ps1xml'
     'Formats/RoleAssignmentScheduleRequest.Types.ps1xml'
+    'Formats/Omnicit.PIM.AzureEligibilitySchedule.Types.ps1xml'
+    'Formats/Omnicit.PIM.AzureAssignmentScheduleInstance.Types.ps1xml'
 )
 
-# BUG: Disabled until https://github.com/PowerShell/PowerShell/issues/17345 is fixed.
+# Disabled: FormatsToProcess uses AppendPath internally, so Az.Resources formats (loaded via RequiredModules)
+# take precedence over ours for Az-native types. Formats are loaded via Update-FormatData -PrependPath in the psm1 instead.
+# Ref: https://github.com/PowerShell/PowerShell/issues/17345 (closed for inactivity, not fixed — confirmed still an issue Feb 2025)
 # FormatsToProcess = @(...)
 
 FunctionsToExport = @(

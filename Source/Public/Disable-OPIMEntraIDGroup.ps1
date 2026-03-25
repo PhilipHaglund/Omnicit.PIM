@@ -14,6 +14,7 @@
     .OUTPUTS
     System.Collections.Hashtable (tagged as Omnicit.PIM.GroupAssignmentScheduleRequest)
     #>
+    [Alias('Disable-PIMGroup')]
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'GroupName')]
     [OutputType([System.Collections.Hashtable])]
     param(
@@ -54,8 +55,10 @@
             }
 
             if (-not $response.group) { $response['group'] = $Group.group }
-            $response.PSObject.TypeNames.Insert(0, 'Omnicit.PIM.GroupAssignmentScheduleRequest')
-            return $response
+            # Convert to PSCustomObject so custom Format views apply (hashtable uses Key/Value formatter).
+            $out = [PSCustomObject]$response
+            $out.PSObject.TypeNames.Insert(0, 'Omnicit.PIM.GroupAssignmentScheduleRequest')
+            return $out
         }
     }
 }

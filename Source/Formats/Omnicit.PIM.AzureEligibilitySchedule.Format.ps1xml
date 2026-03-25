@@ -2,9 +2,9 @@
 <Configuration>
   <ViewDefinitions>
     <View>
-      <Name>Omnicit.PIM.GroupEligibilitySchedule</Name>
+      <Name>Omnicit.PIM.AzureEligibilitySchedule</Name>
       <ViewSelectedBy>
-        <TypeName>Omnicit.PIM.GroupEligibilitySchedule</TypeName>
+        <TypeName>Omnicit.PIM.AzureEligibilitySchedule</TypeName>
       </ViewSelectedBy>
       <TableControl>
         <AutoSize />
@@ -13,16 +13,18 @@
           <TableColumnHeader />
           <TableColumnHeader />
           <TableColumnHeader />
-          <TableColumnHeader />
+          <TableColumnHeader><Label>EndDateTime</Label></TableColumnHeader>
         </TableHeaders>
         <TableRowEntries>
           <TableRowEntry>
             <TableColumnItems>
               <TableColumnItem><PropertyName>PrincipalDisplayName</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>GroupDisplayName</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>AccessId</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>RoleDefinitionDisplayName</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>ScopeDisplayName</PropertyName></TableColumnItem>
               <TableColumnItem><PropertyName>MemberType</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>EndDateTime</PropertyName></TableColumnItem>
+              <TableColumnItem>
+                <ScriptBlock>if ($_.EndDateTime) { $_.EndDateTime } else { 'Never' }</ScriptBlock>
+              </TableColumnItem>
             </TableColumnItems>
           </TableRowEntry>
         </TableRowEntries>

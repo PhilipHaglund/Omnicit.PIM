@@ -99,8 +99,12 @@ Install-OPIMConfiguration -ProfileAlias
 # Preview what -ProfileAlias would do without making changes
 Install-OPIMConfiguration -ProfileAlias -WhatIf
 
-# Register a tenant alias (maps short name -> tenant ID)
+# Register a tenant alias (TenantAlias is the key — the GUID can be updated later)
 Install-OPIMConfiguration -TenantMap -TenantAlias contoso -TenantId '00000000-0000-0000-0000-000000000000'
+
+# Store specific directory roles as the default activation set for a tenant
+Get-OPIMDirectoryRole | Where-Object { $_.roleDefinition.displayName -like 'Compliance*' } |
+    Install-OPIMConfiguration -TenantAlias contoso -TenantId '<guid>'
 
 # Set a default activation duration of 4 hours in your profile
 Install-OPIMConfiguration -DefaultParameters -Duration 4
@@ -109,11 +113,173 @@ Install-OPIMConfiguration -DefaultParameters -Duration 4
 After running `-ProfileAlias`, a new `pim` shortcut becomes available in your sessions:
 
 ```powershell
-# Activate all eligible directory roles and PIM groups
+# Activate all eligible directory roles and PIM groups for 1 hour
 pim
 
-# Activate against a named tenant
-pim -TenantAlias contoso -Duration 8
+# Activate using a named tenant alias, for 4 hours with a justification
+pim -TenantAlias contoso -Duration 4 -Justification 'Incident response'
+```
+
+> **Tip:** The path to your `TenantMap.psd1` is stored in `$OPIMTenantMapPath` at the top of the
+> profile block written by `-ProfileAlias`. Edit that variable in your profile if you keep the
+> file in a non-default location.
+
+---
+
+## TenantMap
+
+The TenantMap is a PowerShell data file (`.psd1`) that maps short tenant aliases to Azure Tenant
+IDs. Each alias can optionally store a default set of roles and groups to activate, so `pim` only
+activates what you actually need rather than everything eligible.
+
+> **The TenantAlias is the key.** You can change the TenantId (e.g. after a tenant migration) by
+> running `Install-OPIMConfiguration -TenantAlias <same-alias> -TenantId <new-guid> -Force`
+> without losing your stored role/group configuration.
+
+### Default location
+
+```
+$env:USERPROFILE\.config\Omnicit.PIM\TenantMap.psd1
+```
+
+### File format
+
+Each entry is a nested hashtable under the alias key. The only required field is `TenantId`;
+the role/group arrays are optional — omit them and `pim` will activate **all** eligible items:
+
+```powershell
+@{
+    # Alias 'corp' — activates only the two stored directory roles and one group
+    'corp' = @{
+        TenantId       = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+        DirectoryRoles = @('e8611ab8-c189-46e8-94e1-60213ab1f814')   # roleDefinitionId
+        EntraIDGroups  = @('75b93f19-07b0-4d87-8b7f-6bd04d79f023_member')  # groupId_accessId
+        AzureRoles     = @('schedule-name-from-get-opimazurerole')
+    }
+    # Alias 'partner' — no role list: activates ALL eligible items at login
+    'partner' = @{
+        TenantId = 'yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy'
+    }
+}
+```
+
+The file is safe to edit manually — it is standard PowerShell data file syntax.
+
+### Key identifiers stored per type
+
+| Type | Stored value | Field on Get-OPIM* object |
+|---|---|---|
+| Directory Role | `roleDefinitionId` | `$_.roleDefinitionId` |
+| Entra ID Group | `"{groupId}_{accessId}"` | `"$($_.groupId)_$($_.accessId)"` |
+| Azure Role | Schedule name | `$_.Name` |
+
+These identifiers are stable across eligibility renewals. The `accessId` in the group key is
+either `member` or `owner`, so you can store member and owner eligibility for the same group
+independently.
+
+### Creating and managing entries
+
+```powershell
+# Basic — add a tenant alias with no role defaults (activates all eligible at runtime)
+# -TenantMap is optional: it is implied when -TenantAlias and -TenantId are provided
+Install-OPIMConfiguration -TenantAlias contoso -TenantId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+
+# Add a second tenant
+Install-OPIMConfiguration -TenantAlias fabrikam -TenantId 'yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy'
+
+# Overwrite an existing alias (update TenantId; existing role lists are preserved)
+Install-OPIMConfiguration -TenantAlias contoso -TenantId '<new-guid>' -Force
+
+# Preview without writing
+Install-OPIMConfiguration -TenantAlias contoso -TenantId '<guid>' -WhatIf
+```
+
+### Configuring default roles by piping from Get-OPIM*
+
+Pipe `Get-OPIM*` output (optionally filtered with `Where-Object`) to store exactly which
+roles/groups `pim` should activate for a tenant. Both eligible (`default`) and activated
+(`-Activated`) objects are accepted — useful for piping your currently active roles as the
+default set. `-TenantMap` is implied; `-TenantAlias` and `-TenantId` are required.
+
+```powershell
+# Store all eligible directory roles for this tenant
+Get-OPIMDirectoryRole |
+    Install-OPIMConfiguration -TenantAlias contoso -TenantId '<guid>'
+
+# Store only specific directory roles (by display name pattern)
+Get-OPIMDirectoryRole |
+    Where-Object { $_.roleDefinition.displayName -in 'Compliance Administrator','User Administrator' } |
+    Install-OPIMConfiguration -TenantAlias contoso -TenantId '<guid>'
+
+# Store currently active groups as defaults (pipe from -Activated)
+Get-OPIMEntraIDGroup -Activated |
+    Install-OPIMConfiguration -TenantAlias contoso -TenantId '<guid>'
+
+# Store eligible PIM group memberships only (not ownerships)
+Get-OPIMEntraIDGroup -AccessType member |
+    Install-OPIMConfiguration -TenantAlias contoso -TenantId '<guid>'
+
+# Store specific Azure RBAC roles
+Get-OPIMAzureRole |
+    Where-Object { $_.RoleDefinitionDisplayName -like 'Contributor*' } |
+    Install-OPIMConfiguration -TenantAlias contoso -TenantId '<guid>'
+
+# Combine directory roles AND groups in two calls with -Force to update incrementally
+Get-OPIMDirectoryRole |
+    Where-Object { $_.roleDefinition.displayName -like '*Admin*' } |
+    Install-OPIMConfiguration -TenantAlias contoso -TenantId '<guid>' -Force
+Get-OPIMEntraIDGroup |
+    Install-OPIMConfiguration -TenantAlias contoso -TenantId '<guid>' -Force
+```
+
+> **Tip:** Running `Install-OPIMConfiguration` again with `-Force` and new piped input
+> replaces the stored role list. Omit pipe input with `-Force` to update only the `TenantId`
+> while keeping the existing role/group lists intact.
+
+### Using a custom path
+
+```powershell
+# One-off override
+pim -TenantAlias contoso -TenantMapPath 'D:\config\MyTenants.psd1'
+
+# Permanent: edit the $OPIMTenantMapPath variable at the top of the block in $PROFILE.CurrentUserAllHosts
+$OPIMTenantMapPath = 'D:\config\MyTenants.psd1'
+```
+
+### Multi-tenant workflow example
+
+```powershell
+# ── First-time setup (run once) ───────────────────────────────────────────────
+
+# 1. Write the Activate-MyPIM / pim alias to your profile
+Install-OPIMConfiguration -ProfileAlias
+
+# 2. Register tenant aliases (-TenantMap is optional; implied by -TenantAlias + -TenantId)
+Install-OPIMConfiguration -TenantAlias corp    -TenantId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+Install-OPIMConfiguration -TenantAlias partner -TenantId 'yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy'
+
+# 3. Connect to the corp tenant and configure default roles
+Connect-MgGraph -TenantId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' -Scopes `
+    'RoleEligibilitySchedule.ReadWrite.Directory', `
+    'RoleAssignmentSchedule.ReadWrite.Directory', `
+    'PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup', `
+    'PrivilegedAssignmentSchedule.ReadWrite.AzureADGroup', `
+    'AdministrativeUnit.Read.All'
+
+Get-OPIMDirectoryRole |
+    Where-Object { $_.roleDefinition.displayName -in 'Compliance Administrator','Security Reader' } |
+    Install-OPIMConfiguration -TenantAlias corp -TenantId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' -Force
+
+Get-OPIMEntraIDGroup -AccessType member |
+    Install-OPIMConfiguration -TenantAlias corp -TenantId 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' -Force
+
+# ── Daily use ─────────────────────────────────────────────────────────────────
+
+# Activate only the stored roles in corp tenant
+pim -TenantAlias corp -Duration 8 -Justification 'Daily operations'
+
+# Activate everything eligible in partner tenant (no stored role list)
+pim -TenantAlias partner -Duration 2 -Justification 'Partner review'
 ```
 
 ---

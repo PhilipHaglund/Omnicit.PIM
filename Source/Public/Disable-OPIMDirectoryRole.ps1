@@ -17,6 +17,7 @@
     .OUTPUTS
     System.Collections.Hashtable (tagged as Omnicit.PIM.DirectoryAssignmentScheduleRequest)
     #>
+    [Alias('Disable-PIMADRole', 'Disable-PIMRole')]
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'RoleName')]
     [OutputType([System.Collections.Hashtable])]
     param(
@@ -64,8 +65,10 @@
             $response.scheduleInfo.expiration.type        = 'afterDateTime'
             $response.scheduleInfo.expiration.endDateTime = $response.createdDateTime
 
-            $response.PSObject.TypeNames.Insert(0, 'Omnicit.PIM.DirectoryAssignmentScheduleRequest')
-            return $response
+            # Convert to PSCustomObject so custom Format views apply (hashtable uses Key/Value formatter).
+            $out = [PSCustomObject]$response
+            $out.PSObject.TypeNames.Insert(0, 'Omnicit.PIM.DirectoryAssignmentScheduleRequest')
+            return $out
         }
     }
 }

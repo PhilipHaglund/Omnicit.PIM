@@ -15,11 +15,13 @@ function Get-OPIMAzureRole {
     Get-OPIMAzureRole -Scope '/subscriptions/00000000-...'
     List eligible Azure roles at a specific subscription scope.
     #>
+    [Alias('Get-PIMResourceRole')]
     [CmdletBinding()]
     param(
         #The scope to query (subscription, resource group, or resource). Defaults to root '/'.
         [Parameter(ValueFromPipeline, ValueFromPipelineByPropertyName)][Alias('Id')][String]$Scope = '/',
-        #Fetch roles for all principals. Usually requires Owner/UserAccessAdministrator at the scope.
+        #Return roles for ALL principals, not just your own. Requires Owner or UserAccessAdministrator at the scope.
+        #By default (without -All) only your own eligible or active roles are returned.
         [Switch]$All,
         #Only return currently activated role assignment instances.
         [Parameter(ParameterSetName = 'Activated')][Switch]$Activated
@@ -29,16 +31,28 @@ function Get-OPIMAzureRole {
         try {
             if ($Activated) {
                 Get-AzRoleAssignmentScheduleInstance -Scope $Scope -Filter $filter -ErrorAction Stop |
-                    Where-Object AssignmentType -EQ 'Activated'
+                    Where-Object AssignmentType -EQ 'Activated' |
+                    ForEach-Object {
+                        $_.PSObject.TypeNames.Insert(0, 'Omnicit.PIM.AzureAssignmentScheduleInstance')
+                        $_
+                    }
             } else {
-                Get-AzRoleEligibilitySchedule -Scope $Scope -Filter $filter -ErrorAction Stop
+                Get-AzRoleEligibilitySchedule -Scope $Scope -Filter $filter -ErrorAction Stop |
+                    ForEach-Object {
+                        $_.PSObject.TypeNames.Insert(0, 'Omnicit.PIM.AzureEligibilitySchedule')
+                        $_
+                    }
             }
         } catch {
             if (-not ($PSItem.FullyQualifiedErrorId.Split(',')[0] -eq 'InsufficientPermissions')) {
                 $PSCmdlet.WriteError($PSItem)
                 return
             }
-            $PSItem.ErrorDetails = "You specified -All but do not have sufficient rights to view all roles at scope ($Scope). This typically requires Owner or UserAccessAdministrator rights."
+            $PSItem.ErrorDetails = if ($All) {
+                "You do not have sufficient rights to view all roles at scope ($Scope). This typically requires Owner or UserAccessAdministrator rights."
+            } else {
+                "Insufficient permissions to list roles at scope ($Scope). If you are trying to view all users' roles, use -All (requires Owner or UserAccessAdministrator)."
+            }
             $PSCmdlet.WriteError($PSItem)
             return
         }

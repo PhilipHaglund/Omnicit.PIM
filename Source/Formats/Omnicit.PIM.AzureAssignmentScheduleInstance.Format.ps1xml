@@ -2,9 +2,9 @@
 <Configuration>
   <ViewDefinitions>
     <View>
-      <Name>Omnicit.PIM.GroupAssignmentScheduleRequest</Name>
+      <Name>Omnicit.PIM.AzureAssignmentScheduleInstance</Name>
       <ViewSelectedBy>
-        <TypeName>Omnicit.PIM.GroupAssignmentScheduleRequest</TypeName>
+        <TypeName>Omnicit.PIM.AzureAssignmentScheduleInstance</TypeName>
       </ViewSelectedBy>
       <TableControl>
         <AutoSize />
@@ -18,10 +18,10 @@
         <TableRowEntries>
           <TableRowEntry>
             <TableColumnItems>
-              <TableColumnItem><PropertyName>Action</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>Status</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>GroupDisplayName</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>AccessId</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>PrincipalDisplayName</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>RoleDefinitionDisplayName</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>ScopeDisplayName</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>AssignmentType</PropertyName></TableColumnItem>
               <TableColumnItem><PropertyName>EndDateTime</PropertyName></TableColumnItem>
             </TableColumnItems>
           </TableRowEntry>

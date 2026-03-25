@@ -17,16 +17,17 @@
     .OUTPUTS
     System.Collections.Hashtable (tagged as Omnicit.PIM.GroupAssignmentScheduleRequest)
     #>
+    [Alias('Enable-PIMGroup')]
     [CmdletBinding(SupportsShouldProcess, DefaultParameterSetName = 'GroupName')]
     [OutputType([System.Collections.Hashtable])]
     param(
         #Eligible group schedule object from Get-OPIMEntraIDGroup.
         [Parameter(ParameterSetName = 'GroupObject', Mandatory, ValueFromPipeline)]
         $Group,
-        #Friendly name of the eligible group assignment. Supports tab completion.
+        #Friendly name of the eligible group assignment. Supports tab completion. Accepts multiple values.
         [Parameter(Position = 0, ParameterSetName = 'GroupName', Mandatory)]
         [ArgumentCompleter([GroupEligibleCompleter])]
-        [string]$GroupName,
+        [string[]]$GroupName,
         #Justification for the activation. May be required by your PIM policy.
         [string]$Justification,
         #Ticket number associated with this activation.
@@ -43,7 +44,13 @@
         [Switch]$Wait
     )
     process {
-        if ($GroupName) { $Group = Resolve-RoleByName -Group $GroupName }
+        $resolvedGroups = if ($GroupName) {
+            $GroupName | ForEach-Object { Resolve-RoleByName -Group $_ }
+        } else {
+            @($Group)
+        }
+
+        foreach ($Group in $resolvedGroups) {
 
         $scheduleInfo = @{
             startDateTime = $NotBefore.ToString('o')
@@ -84,7 +91,7 @@
                 $err = Convert-GraphHttpException $PSItem
                 if (-not ($err.FullyQualifiedErrorId -like 'RoleAssignmentRequestPolicyValidationFailed*')) {
                     $PSCmdlet.WriteError($err)
-                    return
+                    continue
                 }
                 if ($err -match 'JustificationRule') {
                     $err.ErrorDetails = 'Your PIM policy requires a justification for this group. Use the -Justification parameter.'
@@ -93,13 +100,11 @@
                     $err.ErrorDetails = 'Your PIM policy requires a shorter expiration. Use -NotAfter to specify an earlier time.'
                 }
                 $PSCmdlet.WriteError($err)
-                return
+                continue
             }
 
             # Rehydrate group info from the eligibility schedule
             if (-not $response.group) { $response['group'] = $Group.group }
-
-            $response.PSObject.TypeNames.Insert(0, 'Omnicit.PIM.GroupAssignmentScheduleRequest')
 
             if ($Wait) {
                 $pollId = $response.id
@@ -109,7 +114,11 @@
                 } while ($status -like 'Pending*')
             }
 
-            return $response
+            # Convert to PSCustomObject so custom Format views apply (hashtable uses Key/Value formatter).
+            $out = [PSCustomObject]$response
+            $out.PSObject.TypeNames.Insert(0, 'Omnicit.PIM.GroupAssignmentScheduleRequest')
+            $out
         }
+        } # end foreach
     }
 }

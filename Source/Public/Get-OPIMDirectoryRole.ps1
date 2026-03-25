@@ -17,6 +17,7 @@
     .OUTPUTS
     System.Collections.Hashtable (tagged as Omnicit.PIM.DirectoryEligibilitySchedule or Omnicit.PIM.DirectoryAssignmentScheduleInstance)
     #>
+    [Alias('Get-PIMADRole', 'Get-PIMRole')]
     [CmdletBinding()]
     [OutputType([System.Collections.Hashtable])]
     param(
@@ -77,8 +78,11 @@
             } else {
                 $item['directoryScope'] = Invoke-MgGraphRequest -Verbose:$false -Method Get -Uri "v1.0/directory/$($item.directoryScopeId)"
             }
-            $item.PSObject.TypeNames.Insert(0, $typeName)
-            $item
+            # Cast to PSCustomObject so custom Format views are used instead of the
+            # built-in hashtable Key/Value formatter.
+            $obj = [PSCustomObject]$item
+            $obj.PSObject.TypeNames.Insert(0, $typeName)
+            $obj
         }
     }
 }

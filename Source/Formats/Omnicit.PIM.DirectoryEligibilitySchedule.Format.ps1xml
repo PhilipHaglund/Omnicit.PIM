@@ -21,7 +21,7 @@
               <TableColumnItem><PropertyName>PrincipalDisplayName</PropertyName></TableColumnItem>
               <TableColumnItem><PropertyName>RoleName</PropertyName></TableColumnItem>
               <TableColumnItem><PropertyName>Scope</PropertyName></TableColumnItem>
-              <TableColumnItem><PropertyName>memberType</PropertyName></TableColumnItem>
+              <TableColumnItem><PropertyName>MemberType</PropertyName></TableColumnItem>
               <TableColumnItem><PropertyName>EndDateTime</PropertyName></TableColumnItem>
             </TableColumnItems>
           </TableRowEntry>
