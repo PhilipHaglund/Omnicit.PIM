@@ -14,7 +14,7 @@ function Resolve-RoleByName ($RoleName, [Switch]$AD, [Switch]$Group, [Switch]$Ac
     }
 
     $role = if ($Group) {
-        Get-OPIMEntraIDGroup -Identity $scheduleId
+        Get-OPIMEntraIDGroup -Identity $scheduleId -Activated:$Activated
     } elseif ($AD) {
         Get-OPIMDirectoryRole -Activated:$Activated -Identity $scheduleId
     } else {

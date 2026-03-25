@@ -11,7 +11,7 @@ function Enable-OPIMAzureRole {
     .NOTES
     The default activation period is 1 hour. Override with -Hours. Make it persistent in your profile:
 
-    $PSDefaultParameterValues['Enable-OPIM*Role:Hours'] = 5
+    $PSDefaultParameterValues['Enable-OPIM*:Hours'] = 5
 
     .EXAMPLE
     Get-OPIMAzureRole | Enable-OPIMAzureRole
